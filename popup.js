@@ -1,4 +1,5 @@
 const regexInput = document.getElementById("regexInput");
+const regexResetBtn = document.getElementById("regexResetBtn");
 const scanBtn = document.getElementById("scanBtn");
 const downloadCheckedBtn = document.getElementById("downloadCheckedBtn");
 const toggleAllBtn = document.getElementById("toggleAllBtn");
@@ -216,6 +217,13 @@ async function downloadCheckedSuno() {
       saveAs: false
     });
   }
+}
+
+if (regexResetBtn && regexInput) {
+  regexResetBtn.addEventListener("click", async () => {
+    regexInput.value = regexInput.defaultValue;
+    await persistState(statusEl.textContent);
+  });
 }
 
 scanBtn.addEventListener("click", async () => {
