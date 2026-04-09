@@ -6,8 +6,13 @@ const outputTemplateInput = document.getElementById("outputTemplateInput");
 const statusEl = document.getElementById("status");
 const resultsListEl = document.getElementById("resultsList");
 const coffeeWrapEl = document.getElementById("coffeeWrap");
+const coffeeDismissBtn = document.getElementById("coffeeDismissBtn");
 
 const STORAGE_KEY = "scanState";
+const SUPPORT_DISMISS_UNTIL_KEY = "supportDismissedUntil";
+const SUPPORT_DISMISS_COUNT_KEY = "supportDismissCount";
+const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const DEFAULT_OUTPUT_TEMPLATE = "<title>";
 let latestDisplayedItems = [];
 
@@ -189,6 +194,19 @@ async function scanActiveTab() {
   await persistState(statusText);
 }
 
+async function isSupportDismissedActive() {
+  const store = await browser.storage.local.get(SUPPORT_DISMISS_UNTIL_KEY);
+  const until = store[SUPPORT_DISMISS_UNTIL_KEY];
+  return typeof until === "number" && Date.now() < until;
+}
+
+async function showCoffeeWrapIfAllowed() {
+  if (!coffeeWrapEl || (await isSupportDismissedActive())) {
+    return;
+  }
+  coffeeWrapEl.classList.remove("is-hidden");
+}
+
 async function downloadCheckedSuno() {
   const items = getCheckedItems();
   for (const item of items) {
@@ -215,9 +233,7 @@ scanBtn.addEventListener("click", async () => {
 });
 
 downloadCheckedBtn.addEventListener("click", async () => {
-  if (coffeeWrapEl) {
-    coffeeWrapEl.classList.remove("is-hidden");
-  }
+  await showCoffeeWrapIfAllowed();
   try {
     const checkedCount = getCheckedItems().length;
     await downloadCheckedSuno();
@@ -246,6 +262,20 @@ toggleAllBtn.addEventListener("click", async () => {
 outputTemplateInput.addEventListener("input", async () => {
   await persistState(statusEl.textContent);
 });
+
+if (coffeeDismissBtn && coffeeWrapEl) {
+  coffeeDismissBtn.addEventListener("click", async () => {
+    coffeeWrapEl.classList.add("is-hidden");
+    const store = await browser.storage.local.get(SUPPORT_DISMISS_COUNT_KEY);
+    const prevCount = Number(store[SUPPORT_DISMISS_COUNT_KEY]) || 0;
+    const nextCount = prevCount + 1;
+    const hideMs = nextCount >= 2 ? SEVEN_DAYS_MS : TWO_DAYS_MS;
+    await browser.storage.local.set({
+      [SUPPORT_DISMISS_UNTIL_KEY]: Date.now() + hideMs,
+      [SUPPORT_DISMISS_COUNT_KEY]: nextCount
+    });
+  });
+}
 
 restoreState()
   .catch(() => {

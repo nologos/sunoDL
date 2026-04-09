@@ -20,7 +20,7 @@
       </details>
 
       <div class="row buttons">
-        <button id="scanBtn" type="button">Scan Suno page</button>
+        <button id="scanBtn" type="button">Find songs</button>
       </div>
 
       <p id="status">No Suno scan yet.</p>
@@ -34,20 +34,37 @@
         <input id="outputTemplateInput" class="compact-input" type="text" value="&lt;title&gt;" />
         <button id="downloadCheckedBtn" type="button" disabled>Download selected</button>
       </div>
-      <div id="coffeeWrap" class="coffee-wrap is-hidden">
-        <a href="https://www.buymeacoffee.com/nologos" target="_blank">
-          <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" style="height: 60px !important;width: 217px !important;">
-        </a>
 
-        <a
-          id="coffeeQrLink"
-          class="coffee-link"
-          href="https://www.buymeacoffee.com/nologos"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img class="coffee-img" src="cf.png" alt="Buy me a coffee QR code" />
-        </a>
+      <div id="coffeeWrap" class="coffee-wrap is-hidden">
+        <div class="coffee-msg-row">
+          <p class="coffee-msg">
+            If this tool have saved you time, please consider supporting.
+          </p>
+          <button
+            id="coffeeDismissBtn"
+            type="button"
+            class="coffee-dismiss"
+            data-tooltip="I have already donated"
+            aria-label="Dismiss support message"
+          >
+            ×
+          </button>
+        </div>
+        <div class="coffee-links">
+          <a href="https://www.buymeacoffee.com/nologos" target="_blank">
+            <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" style="height: 60px !important;width: 217px !important;">
+          </a>
+
+          <a
+            id="coffeeQrLink"
+            class="coffee-link"
+            href="https://www.buymeacoffee.com/nologos"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <img class="coffee-img" src="cf.png" alt="Buy me a coffee QR code" />
+          </a>
+        </div>
       </div>
     </main>
 
