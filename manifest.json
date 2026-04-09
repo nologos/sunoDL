@@ -1,0 +1,28 @@
+{
+  "manifest_version": 2,
+  "name": "Suno Bulk Download",
+  "version": "0.1.0",
+  "description": "Scan Suno song links and download selected tracks.",
+  "permissions": [
+    "activeTab",
+    "tabs",
+    "downloads",
+    "storage"
+  ],
+  "browser_action": {
+    "default_title": "Suno Bulk Download",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "48": "icons/icon.svg"
+    }
+  },
+  "icons": {
+    "48": "icons/icon.svg",
+    "96": "icons/icon.svg"
+  },
+  "applications": {
+    "gecko": {
+      "id": "suno-download@local"
+    }
+  }
+}

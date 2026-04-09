@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Suno Bulk Download</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="popup">
+      <h1>Suno Bulk Download</h1>
+
+      <details class="row">
+        <summary>Advanced regex</summary>
+        <input
+          id="regexInput"
+          type="text"
+          value="<a[^>]*href=&quot;[^&quot;]*song/([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})[^&quot;]*&quot;[^>]*>([^&lt;]+)</a>"
+        />
+      </details>
+
+      <div class="row buttons">
+        <button id="scanBtn" type="button">Scan Suno page</button>
+      </div>
+
+      <p id="status">No Suno scan yet.</p>
+
+      <div class="row">
+        <button id="toggleAllBtn" type="button" disabled>Select all</button>
+      </div>
+      <div id="resultsList" class="results-list"></div>
+<br />
+      <div class="row output-section">
+        <input id="outputTemplateInput" class="compact-input" type="text" value="&lt;title&gt;" />
+        <button id="downloadCheckedBtn" type="button" disabled>Download selected</button>
+      </div>
+      <div id="coffeeWrap" class="coffee-wrap is-hidden">
+        <a href="https://www.buymeacoffee.com/nologos" target="_blank">
+          <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" style="height: 60px !important;width: 217px !important;">
+        </a>
+
+        <a
+          id="coffeeQrLink"
+          class="coffee-link"
+          href="https://www.buymeacoffee.com/nologos"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <img class="coffee-img" src="cf.png" alt="Buy me a coffee QR code" />
+        </a>
+      </div>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
