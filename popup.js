@@ -10,12 +10,17 @@ const coffeeWrapEl = document.getElementById("coffeeWrap");
 const coffeeDismissBtn = document.getElementById("coffeeDismissBtn");
 
 const STORAGE_KEY = "scanState";
+const MEMORY_KEY = "sunoDlMemory";
 const SUPPORT_DISMISS_UNTIL_KEY = "supportDismissedUntil";
 const SUPPORT_DISMISS_COUNT_KEY = "supportDismissCount";
 const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const DEFAULT_OUTPUT_TEMPLATE = "<title>";
 let latestDisplayedItems = [];
+let currentPageKey = "";
+let coffeeDismissNeedsConfirm = false;
+const COFFEE_DISMISS_ARIA_DEFAULT = "Dismiss support message";
+const COFFEE_DISMISS_ARIA_CONFIRM = "Click again to dismiss";
 
 function getRegex() {
   const source = regexInput.value.trim();
@@ -62,6 +67,42 @@ function buildDisplayedResults(matches) {
       display: `${item.title} -> ${url}`
     };
   });
+}
+
+/**
+ * Suno virtualizes its lists: rows scrolled out of view are removed from the DOM,
+ * so a single scan only ever sees the current window of songs. Scans on the same
+ * page are merged into one growing list instead of replacing it.
+ */
+function toPageKey(url) {
+  if (!url) {
+    return "";
+  }
+  try {
+    const parsed = new URL(url);
+    return `${parsed.origin}${parsed.pathname}${parsed.search}`;
+  } catch (error) {
+    return url;
+  }
+}
+
+function mergeDisplayedResults(existing, incoming) {
+  const byUuid = new Map(existing.map((item) => [item.uuid, item]));
+  const added = [];
+
+  for (const item of incoming) {
+    const known = byUuid.get(item.uuid);
+    if (!known) {
+      byUuid.set(item.uuid, item);
+      added.push(item);
+      continue;
+    }
+    if (item.title && item.title !== known.title) {
+      byUuid.set(item.uuid, item);
+    }
+  }
+
+  return { items: Array.from(byUuid.values()), added };
 }
 
 function getOutputTemplate() {
@@ -114,6 +155,71 @@ function updateDownloadCheckedButtonState() {
   updateToggleAllButtonState();
 }
 
+async function getMemory() {
+  const store = await browser.storage.local.get(MEMORY_KEY);
+  const raw = store[MEMORY_KEY];
+  return {
+    downloaded: new Set(Array.isArray(raw?.downloaded) ? raw.downloaded : []),
+    lastScan: new Set(Array.isArray(raw?.lastScan) ? raw.lastScan : [])
+  };
+}
+
+async function saveMemory(mem) {
+  await browser.storage.local.set({
+    [MEMORY_KEY]: {
+      downloaded: [...mem.downloaded],
+      lastScan: [...mem.lastScan]
+    }
+  });
+}
+
+/**
+ * Auto-select rules:
+ * - Never pre-check items already downloaded.
+ * - Same page as last scan (same uuid set) but some not downloaded yet → check only undownloaded.
+ * - Otherwise treat as new/changed page: check items that were not in the last scan snapshot.
+ */
+function buildSmartCheckedSet(items, mem) {
+  const checked = new Set();
+  if (!items.length) {
+    return checked;
+  }
+
+  const allSeenOnLastScan =
+    items.length > 0 && items.every((item) => mem.lastScan.has(item.uuid));
+  const someUndownloaded = items.some((item) => !mem.downloaded.has(item.uuid));
+
+  if (allSeenOnLastScan && someUndownloaded) {
+    for (const item of items) {
+      if (!mem.downloaded.has(item.uuid)) {
+        checked.add(item.uuid);
+      }
+    }
+    return checked;
+  }
+
+  for (const item of items) {
+    if (!mem.downloaded.has(item.uuid) && !mem.lastScan.has(item.uuid)) {
+      checked.add(item.uuid);
+    }
+  }
+  return checked;
+}
+
+function formatScanStatus(foundCount, checkedCount, addedCount = null) {
+  if (foundCount === 0) {
+    return "found 0";
+  }
+  const found = addedCount === null ? `found ${foundCount}` : `found ${foundCount} (+${addedCount})`;
+  if (checkedCount === foundCount) {
+    return found;
+  }
+  if (checkedCount === 0) {
+    return `${found} · none new (Select all for full list)`;
+  }
+  return `${found} · ${checkedCount} new selected`;
+}
+
 function renderResults(items, checkedUuidSet = null) {
   resultsListEl.innerHTML = "";
   if (!items.length) {
@@ -153,6 +259,7 @@ async function persistState(statusText) {
       regex: regexInput.value,
       outputTemplate: outputTemplateInput.value,
       status: statusText,
+      pageKey: currentPageKey,
       items: latestDisplayedItems,
       checkedUuids: getCheckedUuids()
     }
@@ -170,6 +277,7 @@ async function restoreState() {
     regexInput.value = saved.regex;
   }
   outputTemplateInput.value = saved.outputTemplate || DEFAULT_OUTPUT_TEMPLATE;
+  currentPageKey = typeof saved.pageKey === "string" ? saved.pageKey : "";
   latestDisplayedItems = Array.isArray(saved.items) ? saved.items : [];
   const checkedSet = new Set(Array.isArray(saved.checkedUuids) ? saved.checkedUuids : []);
   renderResults(latestDisplayedItems, checkedSet);
@@ -188,9 +296,38 @@ async function scanActiveTab() {
 
   const regex = getRegex();
   const parsed = parseSunoAnchors(html || "", regex);
-  latestDisplayedItems = buildDisplayedResults(parsed);
-  renderResults(latestDisplayedItems);
-  const statusText = `found ${latestDisplayedItems.length}`;
+  const scanned = buildDisplayedResults(parsed);
+
+  const pageKey = toPageKey(tab.url);
+  const samePage = Boolean(pageKey) && pageKey === currentPageKey;
+  const mem = await getMemory();
+
+  let checkedSet;
+  let addedCount = null;
+
+  if (samePage) {
+    // Keep everything already collected on this page plus whatever the user
+    // checked, and only auto-select the rows this scan revealed for the first time.
+    const previouslyChecked = new Set(getCheckedUuids());
+    const { items, added } = mergeDisplayedResults(latestDisplayedItems, scanned);
+    latestDisplayedItems = items;
+    addedCount = added.length;
+    checkedSet = previouslyChecked;
+    for (const uuid of buildSmartCheckedSet(added, mem)) {
+      checkedSet.add(uuid);
+    }
+  } else {
+    latestDisplayedItems = scanned;
+    checkedSet = buildSmartCheckedSet(latestDisplayedItems, mem);
+  }
+
+  currentPageKey = pageKey;
+  renderResults(latestDisplayedItems, checkedSet);
+
+  mem.lastScan = new Set(latestDisplayedItems.map((item) => item.uuid));
+  await saveMemory(mem);
+
+  const statusText = formatScanStatus(latestDisplayedItems.length, checkedSet.size, addedCount);
   statusEl.textContent = statusText;
   await persistState(statusText);
 }
@@ -205,7 +342,13 @@ async function showCoffeeWrapIfAllowed() {
   if (!coffeeWrapEl || (await isSupportDismissedActive())) {
     return;
   }
+  const wasHidden = coffeeWrapEl.classList.contains("is-hidden");
   coffeeWrapEl.classList.remove("is-hidden");
+  if (wasHidden && coffeeDismissBtn) {
+    coffeeDismissNeedsConfirm = false;
+    coffeeDismissBtn.removeAttribute("title");
+    coffeeDismissBtn.setAttribute("aria-label", COFFEE_DISMISS_ARIA_DEFAULT);
+  }
 }
 
 async function downloadCheckedSuno() {
@@ -232,6 +375,7 @@ scanBtn.addEventListener("click", async () => {
     await scanActiveTab();
   } catch (error) {
     latestDisplayedItems = [];
+    currentPageKey = "";
     resultsListEl.textContent = "";
     updateDownloadCheckedButtonState();
     const statusText = `Error: ${error.message}`;
@@ -243,8 +387,15 @@ scanBtn.addEventListener("click", async () => {
 downloadCheckedBtn.addEventListener("click", async () => {
   await showCoffeeWrapIfAllowed();
   try {
-    const checkedCount = getCheckedItems().length;
+    const queued = getCheckedItems();
+    const checkedCount = queued.length;
     await downloadCheckedSuno();
+    const mem = await getMemory();
+    for (const item of queued) {
+      mem.downloaded.add(item.uuid);
+    }
+    await saveMemory(mem);
+
     const statusText = `Download queued for ${checkedCount} item(s).`;
     statusEl.textContent = statusText;
     await persistState(statusText);
@@ -273,6 +424,16 @@ outputTemplateInput.addEventListener("input", async () => {
 
 if (coffeeDismissBtn && coffeeWrapEl) {
   coffeeDismissBtn.addEventListener("click", async () => {
+    if (!coffeeDismissNeedsConfirm) {
+      coffeeDismissNeedsConfirm = true;
+      coffeeDismissBtn.title = COFFEE_DISMISS_ARIA_CONFIRM;
+      coffeeDismissBtn.setAttribute("aria-label", COFFEE_DISMISS_ARIA_CONFIRM);
+      return;
+    }
+
+    coffeeDismissNeedsConfirm = false;
+    coffeeDismissBtn.removeAttribute("title");
+    coffeeDismissBtn.setAttribute("aria-label", COFFEE_DISMISS_ARIA_DEFAULT);
     coffeeWrapEl.classList.add("is-hidden");
     const store = await browser.storage.local.get(SUPPORT_DISMISS_COUNT_KEY);
     const prevCount = Number(store[SUPPORT_DISMISS_COUNT_KEY]) || 0;
