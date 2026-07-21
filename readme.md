@@ -22,3 +22,9 @@ Browser extension that scans a Suno page for song links and lets you bulk-downlo
 3. Select the tracks you want
 4. Scroll down and click **Find songs** to detect more
 5. Click **Download selected**
+
+## Firefox
+
+![alt text](icons/icon.png)
+
+![alt text](icons/screenshot.png)

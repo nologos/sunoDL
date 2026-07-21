@@ -19,9 +19,12 @@
     "48": "icons/icon.svg",
     "96": "icons/icon.svg"
   },
-  "applications": {
+  "browser_specific_settings": {
     "gecko": {
-      "id": "suno-download@local"
+      "id": "suno-download@local",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
     }
   }
 }
